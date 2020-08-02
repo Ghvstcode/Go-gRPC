@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -56,31 +57,40 @@ func doBidiStreaming (c greetpb2.GreetServiceClient) {
 	if err != nil {
 		log.Fatalf("Error while Creating stream:  %v", err)
 	}
-	waitc := make(chan struct{})
+	//waitc := make(chan struct{})
+	var wg sync.WaitGroup
+
+	wg.Add(2)
 	go func () {
 		for _, req := range request {
 			fmt.Printf("Sending Message: %v \n", req)
-			stream.Send(req)
-			//time.Sleep(2 *time.Second)
+			_ = stream.Send(req)
+			time.Sleep(2 *time.Second)
 		}
-		stream.CloseSend()
+		wg.Done()
+		if err := stream.CloseSend(); err != nil {
+			fmt.Printf("An error occured while closing send: %v \n", err)
+		}
 	}()
 	go func () {
 		for {
-			res, err := stream.Recv()
-			//if err == io.EOF{
-			//	fmt.Printf("An error occured: %v", err)
-			//	//break
-			//}
-			if err != nil {
-				fmt.Printf("An error occured: %v", err)
-				//break
+			res, err2 := stream.Recv()
+			if err2 == io.EOF{
+				fmt.Printf("An error occured: %v \n", err2)
+				break
 			}
-			fmt.Printf("Receiving Message: %v", res.GetResult())
+			if err2 != nil {
+				fmt.Printf("An error occured: %v", err)
+				break
+			}
+			fmt.Printf("Receiving Message: %v \n", res.GetResult())
+
 		}
-		close(waitc)
+		//close(waitc)
+		wg.Done()
 	}()
-	<-waitc
+	//<-waitc
+	wg.Wait()
 }
 func doClientStreaming (c greetpb2.GreetServiceClient) {
 	request := []*greetpb2.LongGreetRequest{
